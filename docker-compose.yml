@@ -1,0 +1,16 @@
+version: "3.9"
+services:
+  agent-orchestrator:
+    build: ./agents
+    environment: [GROQ_API_KEY]
+    depends_on: [vector-db, graph-db]
+  vector-db:
+    image: qdrant/qdrant
+    ports: ["6333:6333"]
+  graph-db:
+    image: neo4j:5
+    environment: [NEO4J_AUTH=neo4j/change_me]
+  watchdog:
+    build: ./watchdog
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+    restart: unless-stopped

@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>NexaGuard — Autonomous Infrastructure Defense Mesh</title>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/mobilenet@2.1.1/dist/mobilenet.min.js"></script>
+<style>
+  :root{--bg:#0A0E14;--surface:#111826;--surface2:#161f30;--line:#232f45;--text:#E8ECF1;--dim:#7C8AA5;
+    --safe:#3FCFA0;--warn:#F0A857;--crit:#E14C5A;--brand:#5BA8FF;box-sizing:border-box}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--text);font-family:'IBM Plex Mono',monospace}
+  h1,h2,h3{font-family:'Space Grotesk',sans-serif}
+  header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--line);background:var(--surface);gap:12px;flex-wrap:wrap}
+  header h1{font-size:17px;margin:0;font-weight:700}
+  header h1 span{color:var(--brand)}
+  #keyrow{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--dim)}
+  #keyrow input{background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:4px;padding:6px 8px;font-family:'IBM Plex Mono',monospace;font-size:11px;width:170px}
+  #keyrow a{color:var(--brand);text-decoration:none}
+  main{display:flex;flex-wrap:wrap}
+  #twin{flex:1.3;min-width:320px;height:380px;position:relative}
+  #twin .label{position:absolute;top:12px;left:14px;font-size:11px;color:var(--dim);line-height:1.5}
+  #twin .label b{color:var(--text);font-family:'Space Grotesk',sans-serif}
+  aside{flex:1;min-width:320px;display:flex;flex-direction:column;border-left:1px solid var(--line)}
+  .panel{border-bottom:1px solid var(--line);padding:14px 16px}
+  .panel h2{font-size:11px;margin:0 0 10px;color:var(--dim);font-weight:600}
+  .panel h2 b{color:var(--text)}
+  textarea{width:100%;background:var(--surface2);border:1px solid var(--line);color:var(--text);border-radius:4px;padding:8px;font-family:'IBM Plex Mono',monospace;font-size:12px;resize:vertical;min-height:52px}
+  button{font-family:'IBM Plex Mono',monospace;background:var(--surface2);color:var(--text);border:1px solid var(--line);border-radius:4px;padding:9px 12px;font-size:11.5px;cursor:pointer;width:100%;margin-top:8px}
+  button:hover:not(:disabled){border-color:var(--brand)}
+  button:disabled{opacity:.5;cursor:default}
+  .step{font-size:11.5px;line-height:1.55;padding:10px;border-left:2px solid var(--line);color:var(--dim);background:var(--surface2);border-radius:0 4px 4px 0;margin-top:8px;white-space:pre-wrap}
+  .step b{color:var(--text)}
+  .step.recon{border-color:var(--brand)}
+  .step.triage{border-color:var(--warn)}
+  .step.response{border-color:var(--safe)}
+  .sev{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-weight:600;margin-left:6px}
+  .sev.low{background:rgba(63,207,160,.15);color:var(--safe)}
+  .sev.medium,.sev.moderate{background:rgba(240,168,87,.15);color:var(--warn)}
+  .sev.high,.sev.critical{background:rgba(225,76,90,.15);color:var(--crit)}
+  #cnnresult{font-size:11.5px;color:var(--dim);margin-top:8px}
+  #cnnresult .pred{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--line)}
+  #cnnresult .pred b{color:var(--text)}
+  #preview{max-width:100%;border-radius:4px;margin-top:8px;display:none;max-height:160px;object-fit:cover}
+  pre{background:var(--surface2);padding:10px;border-radius:4px;font-size:10.5px;overflow-x:auto;color:var(--dim);line-height:1.5}
+  footer{padding:10px 16px;border-top:1px solid var(--line);font-size:10px;color:var(--dim);background:var(--surface)}
+  .err{color:var(--crit);font-size:11px;margin-top:6px}
+  @media(max-width:760px){#twin{height:280px}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Nexa<span>Guard</span> — Autonomous Infrastructure Defense Mesh</h1>
+  <div id="keyrow">
+    Groq key: <input id="groqkey" type="password" placeholder="gsk_...">
+    <a href="https://console.groq.com/keys" target="_blank" rel="noopener">get free key ↗</a>
+  </div>
+</header>
+<main>
+  <div id="twin"><div class="label"><b>DIGITAL TWIN</b><br>Substation Grid · 18 nodes</div></div>
+  <aside>
+    <div class="panel">
+      <h2><b>Live Multi-Agent Analysis</b> — real Groq LLM calls, not scripted</h2>
+      <textarea id="incident">Unusual outbound traffic from node-07 at 02:14, plus a perimeter camera flag near the same rack 40 seconds later.</textarea>
+      <button id="runbtn">Run live incident analysis</button>
+      <div id="agentout"></div>
+    </div>
+    <div class="panel">
+      <h2><b>CNN Vision</b> — real in-browser inference (MobileNet)</h2>
+      <input type="file" id="imgfile" accept="image/*">
+      <img id="preview">
+      <div id="cnnresult">Upload a photo to run real anomaly-style classification client-side.</div>
+    </div>
+    <div class="panel">
+      <h2><b>Docker Mesh</b> — reference deployment (static hosting can't run containers, so this ships as a real docker-compose you can run)</h2>
+      <pre id="compose"></pre>
+    </div>
+  </aside>
+</main>
+<footer>Designed and developed by NIKHIL CHARY SRIRAMOJU — Groq key stays in your browser only (localStorage), never sent anywhere but api.groq.com.</footer>
+
+<script>
+// ---------- 3D digital twin ----------
+const twinEl = document.getElementById('twin');
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(50, twinEl.clientWidth/twinEl.clientHeight, 0.1, 100);
+camera.position.set(0,6,11); camera.lookAt(0,0,0);
+const renderer = new THREE.WebGLRenderer({antialias:true, alpha:true});
+renderer.setSize(twinEl.clientWidth, twinEl.clientHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio,2));
+twinEl.appendChild(renderer.domElement);
+scene.add(new THREE.GridHelper(20,20,0x1b2436,0x161f30));
+const colors = {low:0x3FCFA0, medium:0xF0A857, moderate:0xF0A857, high:0xE14C5A, critical:0xE14C5A};
+const nodeGroup = new THREE.Group(); const nodes=[];
+for(let i=0;i<18;i++){
+  const a=(i/18)*Math.PI*2, r=3.5+(i%3)*1.3;
+  const mesh=new THREE.Mesh(new THREE.OctahedronGeometry(0.22,0), new THREE.MeshBasicMaterial({color:colors.low}));
+  mesh.position.set(Math.cos(a)*r,0.3,Math.sin(a)*r);
+  nodeGroup.add(mesh); nodes.push(mesh);
+}
+scene.add(nodeGroup);
+for(let i=0;i<18;i++){
+  const geo=new THREE.BufferGeometry().setFromPoints([nodes[i].position, nodes[(i+1)%18].position]);
+  scene.add(new THREE.Line(geo, new THREE.LineBasicMaterial({color:0x232f45, transparent:true, opacity:0.6})));
+}
+const hub = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5,0), new THREE.MeshBasicMaterial({color:0x5BA8FF, wireframe:true}));
+scene.add(hub);
+window.addEventListener('resize', ()=>{camera.aspect=twinEl.clientWidth/twinEl.clientHeight; camera.updateProjectionMatrix(); renderer.setSize(twinEl.clientWidth, twinEl.clientHeight);});
+let t=0, flaggedIdx=-1;
+(function animate(){requestAnimationFrame(animate); t+=0.006;
+  nodeGroup.rotation.y=t*0.5; hub.rotation.y-=0.01; hub.rotation.x+=0.004;
+  nodes.forEach((n,i)=>{const s=1+Math.sin(t*2+i)*0.08; n.scale.setScalar(i===flaggedIdx?s*1.4:s);});
+  renderer.render(scene,camera);
+})();
+
+// ---------- persisted Groq key ----------
+const keyInput = document.getElementById('groqkey');
+keyInput.value = localStorage.getItem('nexaguard_groq_key') || '';
+keyInput.addEventListener('change', ()=> localStorage.setItem('nexaguard_groq_key', keyInput.value.trim()));
+
+// ---------- tiny client-side RAG knowledge base ----------
+const KB = [
+  {id:'CVE-2023-4863', text:'Heap buffer overflow in image-processing libraries enabling remote code execution when a malicious image is parsed on an unpatched host.'},
+  {id:'INC-0092', text:'Prior incident: lateral movement detected on the same subnet 14 days ago, originating from a compromised IoT camera, contained by isolating VLAN 12.'},
+  {id:'NIST-800-82-6.2', text:'Compliance rule: any confirmed intrusion on operational-technology network segments must be isolated within 5 minutes of confirmation.'},
+  {id:'CVE-2024-3094', text:'Supply-chain backdoor in a compression library allowing SSH authentication bypass on affected Linux builds.'},
+  {id:'INC-0071', text:'Prior incident: false positive caused by a firmware update triggering unusual outbound traffic; resolved without isolation after vendor confirmation.'},
+  {id:'NIST-800-82-4.1', text:'Compliance rule: physical access anomalies detected near control racks require dual confirmation (camera + badge log) before automated lockout.'},
+];
+function retrieve(query, k=2){
+  const terms = query.toLowerCase().split(/\W+/).filter(Boolean);
+  return KB.map(doc=>{
+    const words = doc.text.toLowerCase();
+    const score = terms.reduce((s,term)=> s + (words.includes(term)?1:0), 0);
+    return {...doc, score};
+  }).sort((a,b)=>b.score-a.score).slice(0,k);
+}
+
+// ---------- Groq call ----------
+async function groqChat(systemPrompt, userPrompt){
+  const key = keyInput.value.trim();
+  if(!key) throw new Error('Enter your Groq API key above first (free at console.groq.com/keys).');
+  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    method:'POST',
+    headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+    body: JSON.stringify({
+      model:'llama-3.3-70b-versatile',
+      messages:[{role:'system',content:systemPrompt},{role:'user',content:userPrompt}],
+      temperature:0.4, max_tokens:400
+    })
+  });
+  if(!res.ok){ const t = await res.text(); throw new Error('Groq API error ('+res.status+'): '+t.slice(0,200)); }
+  const data = await res.json();
+  return data.choices[0].message.content;
+}
+
+function addStep(kind, title, text){
+  const div = document.createElement('div');
+  div.className = 'step '+kind;
+  div.innerHTML = '<b>'+title+'</b>\n'+text;
+  document.getElementById('agentout').appendChild(div);
+  return div;
+}
+
+document.getElementById('runbtn').addEventListener('click', async ()=>{
+  const out = document.getElementById('agentout');
+  out.innerHTML = '';
+  const btn = document.getElementById('runbtn');
+  const incident = document.getElementById('incident').value.trim() || 'Unspecified anomaly.';
+  btn.disabled = true; btn.textContent = 'Running…';
+  flaggedIdx = Math.floor(Math.random()*18);
+  try{
+    const reconStep = addStep('recon','RECON AGENT · analyzing…','');
+    const recon = await groqChat(
+      'You are the Recon Agent in an infrastructure security system. Given a raw event description, in 2-3 sentences state whether it looks correlated/suspicious and what to check next. Be concise and technical.',
+      incident
+    );
+    reconStep.innerHTML = '<b>RECON AGENT</b>\n'+recon;
+
+    const hits = retrieve(incident, 2);
+    const ragStep = addStep('triage','RETRIEVED CONTEXT (client-side RAG)','');
+    ragStep.innerHTML = '<b>RETRIEVED CONTEXT</b>\n' + hits.map(h=>'• '+h.id+': '+h.text).join('\n');
+
+    const triageStep = addStep('triage','TRIAGE AGENT · analyzing…','');
+    const triageRaw = await groqChat(
+      'You are the Triage Agent. Given the recon summary and retrieved knowledge-base context, respond with STRICT JSON only, no markdown, in this exact shape: {"severity":"low|medium|high|critical","confidence":0-100,"recommended_action":"...","reasoning":"..."}',
+      'Recon summary: '+recon+'\n\nRetrieved context:\n'+hits.map(h=>h.id+': '+h.text).join('\n')
+    );
+    let triage;
+    try{ triage = JSON.parse(triageRaw.trim().replace(/^```json|```$/g,'')); }
+    catch(e){ triage = {severity:'medium', confidence:60, recommended_action:'Manual review required', reasoning: triageRaw}; }
+    triageStep.innerHTML = '<b>TRIAGE AGENT</b> <span class="sev '+triage.severity+'">'+triage.severity.toUpperCase()+' · '+triage.confidence+'%</span>\n'+triage.reasoning+'\n\nRecommended: '+triage.recommended_action;
+
+    nodes[flaggedIdx].material.color.set(colors[triage.severity] || colors.medium);
+
+    const responseStep = addStep('response','RESPONSE AGENT · drafting…','');
+    const response = await groqChat(
+      'You are the Response Agent. Given the triage verdict, write a short professional incident-log entry (3-4 sentences) describing the containment action taken and why, suitable for an audit trail.',
+      'Triage verdict: '+JSON.stringify(triage)
+    );
+    responseStep.innerHTML = '<b>RESPONSE AGENT — INCIDENT LOG</b>\n'+response;
+  }catch(err){
+    addStep('response','ERROR', '').innerHTML = '<div class="err">'+err.message+'</div>';
+  }finally{
+    btn.disabled = false; btn.textContent = 'Run live incident analysis';
+  }
+});
+
+// ---------- real CNN inference (MobileNet via TF.js) ----------
+let mobilenetModel = null;
+async function ensureModel(){
+  if(!mobilenetModel){
+    document.getElementById('cnnresult').textContent = 'Loading MobileNet model…';
+    mobilenetModel = await mobilenet.load();
+  }
+  return mobilenetModel;
+}
+document.getElementById('imgfile').addEventListener('change', async (e)=>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const img = document.getElementById('preview');
+  img.src = URL.createObjectURL(file);
+  img.style.display = 'block';
+  img.onload = async ()=>{
+    try{
+      const model = await ensureModel();
+      const preds = await model.classify(img);
+      const watchwords = ['person','human','suit','vest','tool','knife','weapon'];
+      document.getElementById('cnnresult').innerHTML = preds.map(p=>{
+        const flagged = watchwords.some(w=>p.className.toLowerCase().includes(w));
+        return '<div class="pred"><span>'+p.className+(flagged?' ⚠':'')+'</span><b>'+(p.probability*100).toFixed(1)+'%</b></div>';
+      }).join('');
+    }catch(err){
+      document.getElementById('cnnresult').innerHTML = '<div class="err">Model load failed: '+err.message+'</div>';
+    }
+  };
+});
+
+// ---------- real docker-compose reference ----------
+document.getElementById('compose').textContent =
+`version: "3.9"
+services:
+  agent-orchestrator:
+    build: ./agents
+    environment: [GROQ_API_KEY]
+    depends_on: [vector-db, graph-db]
+  vector-db:
+    image: qdrant/qdrant
+    ports: ["6333:6333"]
+  graph-db:
+    image: neo4j:5
+    environment: [NEO4J_AUTH=neo4j/change_me]
+  watchdog:
+    build: ./watchdog
+    volumes: ["/var/run/docker.sock:/var/run/docker.sock"]
+    restart: unless-stopped`;
+</script>
+</body>
+</html>
