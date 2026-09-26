@@ -48,12 +48,30 @@
   pre{background:var(--surface2);padding:10px;border-radius:4px;font-size:10.5px;overflow-x:auto;color:var(--dim);line-height:1.5}
   footer{padding:10px 16px;border-top:1px solid var(--line);font-size:10px;color:var(--dim);background:var(--surface)}
   .err{color:var(--crit);font-size:11px;margin-top:6px}
+  .ok{color:var(--safe);font-size:11px;margin-top:6px}
+  #devcard{background:var(--surface);padding:20px;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  #devcard .badge{display:flex;align-items:center;gap:12px;margin-bottom:10px}
+  #devcard .avatar{width:44px;height:44px;border-radius:50%;background:linear-gradient(135deg,var(--brand),var(--safe));display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:16px;color:#08111f;flex-shrink:0}
+  #devcard h3{margin:0;font-size:15px}
+  #devcard .role{font-size:11px;color:var(--dim);margin-top:2px}
+  #devcard .details{font-size:11px;color:var(--dim);line-height:1.8;margin-top:8px}
+  #devcard .details b{color:var(--text)}
+  #devcard .links{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px}
+  #devcard .links a{color:var(--brand);text-decoration:none;font-size:11px}
+  #devcard .links a:hover{text-decoration:underline}
+  video#vpreview{max-width:100%;border-radius:4px;margin-top:8px;display:none;max-height:160px}
+  .filerow{display:flex;gap:8px}
+  .filerow input[type=file]{flex:1;min-width:0}
+  small.hint{display:block;color:var(--dim);font-size:10px;margin-top:6px}
   @media(max-width:760px){#twin{height:280px}}
 </style>
 </head>
 <body>
 <header>
-  <h1>Nexa<span>Guard</span> — Autonomous Infrastructure Defense Mesh</h1>
+  <div>
+    <h1>Nexa<span>Guard</span> — Autonomous Infrastructure Defense Mesh</h1>
+    <div style="font-size:10.5px;color:var(--dim);margin-top:3px">Designed &amp; developed by <b style="color:var(--text)">Nikhil Chary Sriramoju</b></div>
+  </div>
   <div id="keyrow">
     Groq key: <input id="groqkey" type="password" placeholder="gsk_...">
     <a href="https://console.groq.com/keys" target="_blank" rel="noopener">get free key ↗</a>
@@ -69,10 +87,15 @@
       <div id="agentout"></div>
     </div>
     <div class="panel">
-      <h2><b>CNN Vision</b> — real in-browser inference (MobileNet)</h2>
-      <input type="file" id="imgfile" accept="image/*">
+      <h2><b>CNN Vision</b> — real in-browser inference (MobileNet), photo or video clip</h2>
+      <div class="filerow">
+        <input type="file" id="imgfile" accept="image/*,video/*">
+      </div>
+      <small class="hint">Video clips: the frame at the point you scrub to (or the current frame) is analyzed.</small>
       <img id="preview">
-      <div id="cnnresult">Upload a photo to run real anomaly-style classification client-side.</div>
+      <video id="vpreview" controls muted playsinline></video>
+      <button id="analyzebtn" disabled>Analyze upload</button>
+      <div id="cnnresult">Upload a photo or video, then tap Analyze.</div>
     </div>
     <div class="panel">
       <h2><b>Docker Mesh</b> — reference deployment (static hosting can't run containers, so this ships as a real docker-compose you can run)</h2>
@@ -80,7 +103,28 @@
     </div>
   </aside>
 </main>
-<footer>Designed and developed by NIKHIL CHARY SRIRAMOJU — Groq key stays in your browser only (localStorage), never sent anywhere but api.groq.com.</footer>
+
+<div id="devcard">
+  <div class="badge">
+    <div class="avatar">NS</div>
+    <div>
+      <h3>Nikhil Chary Sriramoju</h3>
+      <div class="role">Designed &amp; Developed this project — B.Tech CSE, Final Year</div>
+    </div>
+  </div>
+  <div class="details">
+    <b>Education:</b> B.Tech in Computer Science and Engineering, Vaagdevi College of Engineering (2023–2027)<br>
+    <b>Certifications:</b> NASSCOM / Skill India Digital Hub — AI-Data Engineering &amp; Cloud Infrastructure Analyst · IBM SkillsBuild — AI Fundamentals · Reliance Foundation — AI/ML Engineer Foundation<br>
+    <b>Experience:</b> Machine Learning Engineer Intern, Yuva Intern (NSDC) · Data Analytics Intern, Thiranex
+  </div>
+  <div class="links">
+    <a href="https://github.com/Nikhil-creat" target="_blank" rel="noopener">GitHub ↗</a>
+    <a href="https://in.linkedin.com/in/nikhil-chary-sriramoju-95041b38a" target="_blank" rel="noopener">LinkedIn ↗</a>
+    <a href="mailto:sriramojunikhil66@gmail.com">Email</a>
+  </div>
+</div>
+
+<footer>© 2026 Nikhil Chary Sriramoju — NexaGuard. Groq key stays in your browser only (localStorage), never sent anywhere but api.groq.com.</footer>
 
 <script>
 // ---------- 3D digital twin ----------
@@ -139,22 +183,39 @@ function retrieve(query, k=2){
   }).sort((a,b)=>b.score-a.score).slice(0,k);
 }
 
-// ---------- Groq call ----------
-async function groqChat(systemPrompt, userPrompt){
+// ---------- Groq call: timeout + retry with backoff for reliability ----------
+async function groqChat(systemPrompt, userPrompt, attempt=1){
   const key = keyInput.value.trim();
   if(!key) throw new Error('Enter your Groq API key above first (free at console.groq.com/keys).');
-  const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-    method:'POST',
-    headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
-    body: JSON.stringify({
-      model:'llama-3.3-70b-versatile',
-      messages:[{role:'system',content:systemPrompt},{role:'user',content:userPrompt}],
-      temperature:0.4, max_tokens:400
-    })
-  });
-  if(!res.ok){ const t = await res.text(); throw new Error('Groq API error ('+res.status+'): '+t.slice(0,200)); }
-  const data = await res.json();
-  return data.choices[0].message.content;
+  const controller = new AbortController();
+  const timeoutId = setTimeout(()=>controller.abort(), 20000);
+  try{
+    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+      method:'POST',
+      headers:{'Content-Type':'application/json','Authorization':'Bearer '+key},
+      signal: controller.signal,
+      body: JSON.stringify({
+        model:'openai/gpt-oss-120b',
+        messages:[{role:'system',content:systemPrompt},{role:'user',content:userPrompt}],
+        temperature:0.4, max_tokens:400
+      })
+    });
+    clearTimeout(timeoutId);
+    if(res.status===429 || res.status>=500){
+      if(attempt<3){ await new Promise(r=>setTimeout(r, attempt*1200)); return groqChat(systemPrompt, userPrompt, attempt+1); }
+      throw new Error('Groq API busy/rate-limited after retries ('+res.status+'). Try again shortly.');
+    }
+    if(!res.ok){ const t = await res.text(); throw new Error('Groq API error ('+res.status+'): '+t.slice(0,200)); }
+    const data = await res.json();
+    return data.choices[0].message.content;
+  }catch(err){
+    clearTimeout(timeoutId);
+    if(err.name==='AbortError'){
+      if(attempt<3) return groqChat(systemPrompt, userPrompt, attempt+1);
+      throw new Error('Request timed out after retries. Check your connection.');
+    }
+    throw err;
+  }
 }
 
 function addStep(kind, title, text){
@@ -209,34 +270,70 @@ document.getElementById('runbtn').addEventListener('click', async ()=>{
   }
 });
 
-// ---------- real CNN inference (MobileNet via TF.js) ----------
-let mobilenetModel = null;
+// ---------- real CNN inference (MobileNet via TF.js) — photo or video, explicit button ----------
+let mobilenetModel = null, modelLoadPromise = null;
 async function ensureModel(){
-  if(!mobilenetModel){
+  if(mobilenetModel) return mobilenetModel;
+  if(!modelLoadPromise){
     document.getElementById('cnnresult').textContent = 'Loading MobileNet model…';
-    mobilenetModel = await mobilenet.load();
+    modelLoadPromise = mobilenet.load().then(m=>{ mobilenetModel = m; return m; });
   }
-  return mobilenetModel;
+  return modelLoadPromise;
 }
-document.getElementById('imgfile').addEventListener('change', async (e)=>{
+// warm the model in the background as soon as the page loads, so Analyze feels instant later
+ensureModel().catch(()=>{});
+
+const imgEl = document.getElementById('preview');
+const vidEl = document.getElementById('vpreview');
+const analyzeBtn = document.getElementById('analyzebtn');
+let currentKind = null; // 'image' | 'video'
+
+document.getElementById('imgfile').addEventListener('change', (e)=>{
   const file = e.target.files[0];
+  const cnnresult = document.getElementById('cnnresult');
+  imgEl.style.display = 'none'; vidEl.style.display = 'none';
+  analyzeBtn.disabled = true;
   if(!file) return;
-  const img = document.getElementById('preview');
-  img.src = URL.createObjectURL(file);
-  img.style.display = 'block';
-  img.onload = async ()=>{
-    try{
-      const model = await ensureModel();
-      const preds = await model.classify(img);
-      const watchwords = ['person','human','suit','vest','tool','knife','weapon'];
-      document.getElementById('cnnresult').innerHTML = preds.map(p=>{
-        const flagged = watchwords.some(w=>p.className.toLowerCase().includes(w));
-        return '<div class="pred"><span>'+p.className+(flagged?' ⚠':'')+'</span><b>'+(p.probability*100).toFixed(1)+'%</b></div>';
-      }).join('');
-    }catch(err){
-      document.getElementById('cnnresult').innerHTML = '<div class="err">Model load failed: '+err.message+'</div>';
-    }
-  };
+  if(!file.type.startsWith('image/') && !file.type.startsWith('video/')){
+    cnnresult.innerHTML = '<div class="err">Unsupported file type — choose a photo or video.</div>';
+    return;
+  }
+  const url = URL.createObjectURL(file);
+  if(file.type.startsWith('image/')){
+    currentKind = 'image';
+    imgEl.src = url; imgEl.style.display = 'block';
+    imgEl.onload = ()=>{ analyzeBtn.disabled = false; cnnresult.textContent = 'Ready — tap Analyze upload.'; };
+  } else {
+    currentKind = 'video';
+    vidEl.src = url; vidEl.style.display = 'block';
+    vidEl.onloadeddata = ()=>{ analyzeBtn.disabled = false; cnnresult.textContent = 'Ready — scrub to a frame (optional), then tap Analyze upload.'; };
+  }
+});
+
+function grabVideoFrame(video){
+  const canvas = document.createElement('canvas');
+  canvas.width = video.videoWidth; canvas.height = video.videoHeight;
+  canvas.getContext('2d').drawImage(video, 0, 0, canvas.width, canvas.height);
+  return canvas;
+}
+
+analyzeBtn.addEventListener('click', async ()=>{
+  const cnnresult = document.getElementById('cnnresult');
+  analyzeBtn.disabled = true; analyzeBtn.textContent = 'Analyzing…';
+  try{
+    const model = await ensureModel();
+    const source = currentKind === 'video' ? grabVideoFrame(vidEl) : imgEl;
+    const preds = await model.classify(source);
+    const watchwords = ['person','human','suit','vest','tool','knife','weapon'];
+    cnnresult.innerHTML = preds.map(p=>{
+      const flagged = watchwords.some(w=>p.className.toLowerCase().includes(w));
+      return '<div class="pred"><span>'+p.className+(flagged?' ⚠':'')+'</span><b>'+(p.probability*100).toFixed(1)+'%</b></div>';
+    }).join('') + (currentKind==='video' ? '<div class="ok">Analyzed current video frame.</div>' : '');
+  }catch(err){
+    cnnresult.innerHTML = '<div class="err">Inference failed: '+err.message+' — try re-selecting the file.</div>';
+  }finally{
+    analyzeBtn.disabled = false; analyzeBtn.textContent = 'Analyze upload';
+  }
 });
 
 // ---------- real docker-compose reference ----------
